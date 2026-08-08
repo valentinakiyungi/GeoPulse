@@ -28,6 +28,44 @@
 
 ---
 
+##  System Architecture
+
+GeoPulse AI is built as a decoupled, asynchronous spatial analytics pipeline that pairs deep learning object detection with real-time geospatial coordinate projection.
+
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                  GEOPULSE AI PLATFORM                                   │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+
+[ CLIENT LAYER ]
+┌───────────────────────────┐         Multipart Form-Data         ┌───────────────────────────┐
+│    Next.js 14 Client      │ ──────────────────────────────────> │    FastAPI ASGI Gateway   │
+│  (React, Tailwind, Lucide)│                                     │     (Uvicorn Engine)      │
+└─────────────┬─────────────┘                                     └─────────────┬─────────────┘
+│                                                                 │
+│ GeoJSON Payload                                                 │ Async Job Dispatch
+▼                                                                 ▼
+┌───────────────────────────┐                                     ┌───────────────────────────┐
+│   Mapbox GL JS Engine     │                                     │   Vision Pipeline Worker  │
+│ (3D Satellite Vector Map) │                                     │   (Background Job Queue)  │
+└───────────────────────────┘                                     └─────────────┬─────────────┘
+│
+┌───────────────────────────────────────┴───────────────────────────────────────┐
+│                                                                               │
+▼                                                                               ▼
+┌───────────────────────┐                                                       ┌───────────────────────┐
+│  YOLOv8 Tensor Core   │                                                       │  GeoMapper Math Core  │
+│ (OpenCV Image Stream) │                                                       │  (2D Affine Matrix)   │
+└───────────┬───────────┘                                                       └───────────┬───────────┘
+│ Pixel Bounding Boxes                                                          │ WGS84 GPS Polygons
+└───────────────────────────────────────┬───────────────────────────────────────┘
+│
+▼
+┌───────────────────────────┐
+│ GeoJSON FeatureCollection │
+└───────────────────────────┘
+
+---
+
 ##  Quick Start
 
 ### 1. Backend (FastAPI + YOLOv8)
