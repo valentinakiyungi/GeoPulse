@@ -32,37 +32,27 @@
 
 GeoPulse AI is built as a decoupled, asynchronous spatial analytics pipeline that pairs deep learning object detection with real-time geospatial coordinate projection.
 
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                  GEOPULSE AI PLATFORM                                   │
-└─────────────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Client ["Client Layer"]
+        UI["Next.js 14 Dashboard<br/>(React, Tailwind)"]
+        Map["Mapbox GL JS Engine<br/>(3D Vector Map)"]
+    end
 
-[ CLIENT LAYER ]
-┌───────────────────────────┐         Multipart Form-Data         ┌───────────────────────────┐
-│    Next.js 14 Client      │ ──────────────────────────────────> │    FastAPI ASGI Gateway   │
-│  (React, Tailwind, Lucide)│                                     │     (Uvicorn Engine)      │
-└─────────────┬─────────────┘                                     └─────────────┬─────────────┘
-│                                                                 │
-│ GeoJSON Payload                                                 │ Async Job Dispatch
-▼                                                                 ▼
-┌───────────────────────────┐                                     ┌───────────────────────────┐
-│   Mapbox GL JS Engine     │                                     │   Vision Pipeline Worker  │
-│ (3D Satellite Vector Map) │                                     │   (Background Job Queue)  │
-└───────────────────────────┘                                     └─────────────┬─────────────┘
-│
-┌───────────────────────────────────────┴───────────────────────────────────────┐
-│                                                                               │
-▼                                                                               ▼
-┌───────────────────────┐                                                       ┌───────────────────────┐
-│  YOLOv8 Tensor Core   │                                                       │  GeoMapper Math Core  │
-│ (OpenCV Image Stream) │                                                       │  (2D Affine Matrix)   │
-└───────────┬───────────┘                                                       └───────────┬───────────┘
-│ Pixel Bounding Boxes                                                          │ WGS84 GPS Polygons
-└───────────────────────────────────────┬───────────────────────────────────────┘
-│
-▼
-┌───────────────────────────┐
-│ GeoJSON FeatureCollection │
-└───────────────────────────┘
+    subgraph Backend ["FastAPI ASGI Gateway"]
+        API["/api/v1/vision/analyze"]
+        Worker["Async Background Queue"]
+        YOLO["YOLOv8 Tensor Core<br/>(OpenCV Stream)"]
+        Geo["GeoMapper Engine<br/>(2D Affine Projection)"]
+    end
+
+    UI -- "Multipart Image + GPS" --> API
+    API -- "Job UUID" --> Worker
+    Worker --> YOLO
+    YOLO -- "Pixel Boxes [x, y]" --> Geo
+    Geo -- "WGS84 Coordinates" --> Worker
+    Worker -- "GeoJSON FeatureCollection" --> Map
+```
 
 ---
 
