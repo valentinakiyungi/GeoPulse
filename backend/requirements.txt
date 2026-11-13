@@ -1,9 +1,10 @@
-fastapi==0.110.0
-uvicorn[standard]==0.28.0
-ultralytics==8.1.34
-opencv-python-headless==4.9.0.80
-numpy==1.26.4
-pydantic==2.6.4
-python-multipart==0.0.9
-torch==2.2.2
-torchvision==0.17.2
+# GeoPulse AI Engine — runtime dependencies (Python 3.10–3.13)
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.28
+python-multipart>=0.0.9
+numpy>=1.26
+opencv-python-headless>=4.9
+pillow>=10.2
+# Ultralytics pulls in PyTorch. For a CPU-only install that is much smaller, first run:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+ultralytics>=8.1.34
