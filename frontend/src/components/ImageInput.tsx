@@ -21,13 +21,20 @@ function formatBytes(n: number) {
 export default function ImageInput({ file, dims, onFile, disabled }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const open = () => !disabled && inputRef.current?.click();
 
   return (
     <div
       role="button"
-      tabIndex={0}
-      onClick={() => !disabled && inputRef.current?.click()}
-      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && !disabled && inputRef.current?.click()}
+      tabIndex={disabled ? -1 : 0}
+      aria-label={file ? `Replace image ${file.name}` : "Choose an image"}
+      onClick={open}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          open();
+        }
+      }}
       onDragOver={(e) => {
         e.preventDefault();
         setDragging(true);
@@ -39,8 +46,8 @@ export default function ImageInput({ file, dims, onFile, disabled }: Props) {
         const f = e.dataTransfer.files?.[0];
         if (f && !disabled) onFile(f);
       }}
-      className={`cursor-pointer rounded-xl border-2 border-dashed p-5 text-center transition ${
-        dragging ? "border-emerald-400 bg-emerald-500/5" : "border-slate-700 hover:border-emerald-500"
+      className={`flex cursor-pointer items-center gap-3.5 rounded-xl border border-dashed p-4 transition-colors ${
+        dragging ? "border-marker bg-marker/10" : "border-petrol-600 bg-petrol-950/40 hover:border-mist-faint"
       } ${disabled ? "pointer-events-none opacity-60" : ""}`}
     >
       <input
@@ -54,21 +61,24 @@ export default function ImageInput({ file, dims, onFile, disabled }: Props) {
           e.target.value = "";
         }}
       />
+      <span
+        className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${file ? "bg-marker/15 text-marker" : "bg-petrol-800 text-mist-muted"}`}
+      >
+        {file ? <ImageIcon className="h-5 w-5" /> : <Upload className="h-5 w-5" />}
+      </span>
       {file ? (
-        <div className="space-y-1">
-          <ImageIcon className="mx-auto h-7 w-7 text-emerald-400" />
-          <p className="truncate text-sm font-medium text-slate-100">{file.name}</p>
-          <p className="text-xs text-slate-500">
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium text-mist">{file.name}</span>
+          <span className="block text-xs text-mist-faint">
             {formatBytes(file.size)}
-            {dims ? ` · ${dims.width}×${dims.height}px` : ""} · click to replace
-          </p>
-        </div>
+            {dims ? `, ${dims.width} × ${dims.height} px` : ""}. Tap to replace.
+          </span>
+        </span>
       ) : (
-        <div className="space-y-1">
-          <Upload className="mx-auto h-7 w-7 text-slate-400" />
-          <p className="text-sm font-medium text-slate-200">Drop a satellite or drone image</p>
-          <p className="text-xs text-slate-500">JPEG · PNG · WebP · GeoTIFF (auto geo-referenced)</p>
-        </div>
+        <span className="min-w-0">
+          <span className="block text-sm font-medium text-mist">Choose a satellite or drone image</span>
+          <span className="block text-xs text-mist-faint">JPEG, PNG, WebP or GeoTIFF. You can also drop it here.</span>
+        </span>
       )}
     </div>
   );

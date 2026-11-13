@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Crosshair, Eraser, Maximize2 } from "lucide-react";
+import { Eraser, Frame, Maximize2 } from "lucide-react";
 
 import type { Corners, LatLng } from "@/lib/types";
 import { cornersValid } from "@/lib/geo";
 
-const LABELS = ["Top-left", "Top-right", "Bottom-right", "Bottom-left"];
+const LABELS = ["Top left", "Top right", "Bottom right", "Bottom left"];
 
 function toFields(c: Corners | null): string[] {
   if (!c) return Array(8).fill("");
@@ -23,15 +23,17 @@ function parseFields(fields: string[]): Corners | null {
 interface Props {
   corners: Corners | null;
   source: string | null;
+  framing: boolean;
   onChange: (corners: Corners | null, source: string | null) => void;
-  onUseMapView: () => void;
+  onFrame: () => void;
   onFitMap: () => void;
 }
 
-export default function CornerEditor({ corners, source, onChange, onUseMapView, onFitMap }: Props) {
+export default function CornerEditor({ corners, source, framing, onChange, onFrame, onFitMap }: Props) {
   const [fields, setFields] = useState<string[]>(() => toFields(corners));
+  const [showFields, setShowFields] = useState(false);
 
-  // Sync when corners are set from outside (map view, GeoTIFF, history).
+  // Sync when corners are set from outside (map frame, GeoTIFF, history).
   useEffect(() => {
     if (corners && JSON.stringify(parseFields(fields)) !== JSON.stringify(corners)) {
       setFields(toFields(corners));
@@ -43,73 +45,84 @@ export default function CornerEditor({ corners, source, onChange, onUseMapView, 
     const next = [...fields];
     next[idx] = value;
     setFields(next);
-    onChange(parseFields(next), "manual");
+    onChange(parseFields(next), "manual entry");
   };
 
   const incomplete = fields.some((f) => f.trim() !== "") && !parseFields(fields);
 
   return (
     <div className="space-y-3">
-      <p className="text-xs leading-relaxed text-slate-400">
-        Tell GeoPulse where the image sits on Earth. Pan and zoom the map so the image&apos;s area fills the view and
-        click <span className="text-slate-200">Use map view</span>, upload a GeoTIFF, or type the corner coordinates.
+      <p className="text-[13px] leading-relaxed text-mist-muted">
+        {framing
+          ? "Move the map until the area your image shows fills the orange frame, then tap Set area."
+          : "Mark where the image sits on Earth. Line it up inside a frame on the map, upload a GeoTIFF, or type the corner coordinates."}
       </p>
 
       <div className="grid grid-cols-2 gap-2">
-        <button type="button" onClick={onUseMapView} className="btn-secondary">
-          <Crosshair className="h-3.5 w-3.5" /> Use map view
+        <button type="button" onClick={onFrame} disabled={framing} className="btn-secondary">
+          <Frame className="h-4 w-4" /> {corners ? "Reframe on map" : "Frame on map"}
         </button>
         <button type="button" onClick={onFitMap} disabled={!corners} className="btn-secondary">
-          <Maximize2 className="h-3.5 w-3.5" /> Zoom to area
+          <Maximize2 className="h-4 w-4" /> Zoom to area
         </button>
       </div>
 
-      <div className="space-y-1.5">
-        <div className="grid grid-cols-[84px_1fr_1fr] gap-1.5 text-[10px] uppercase tracking-wider text-slate-500">
-          <span />
-          <span>Latitude</span>
-          <span>Longitude</span>
-        </div>
-        {LABELS.map((label, i) => (
-          <div key={label} className="grid grid-cols-[84px_1fr_1fr] items-center gap-1.5">
-            <span className="text-xs text-slate-400">{label}</span>
-            <input
-              inputMode="decimal"
-              className="input"
-              placeholder="25.2048"
-              value={fields[i * 2]}
-              onChange={(e) => update(i * 2, e.target.value)}
-              aria-label={`${label} latitude`}
-            />
-            <input
-              inputMode="decimal"
-              className="input"
-              placeholder="55.2708"
-              value={fields[i * 2 + 1]}
-              onChange={(e) => update(i * 2 + 1, e.target.value)}
-              aria-label={`${label} longitude`}
-            />
-          </div>
-        ))}
+      <div className="flex items-center justify-between gap-3 text-[13px]">
+        <span className={incomplete ? "text-marker" : corners ? "text-contour" : "text-mist-faint"}>
+          {incomplete ? "Enter valid coordinates for all four corners" : corners ? `Set from ${source ?? "manual entry"}` : "Area not set yet"}
+        </span>
+        <button
+          type="button"
+          onClick={() => setShowFields((v) => !v)}
+          className="shrink-0 text-mist-muted underline decoration-petrol-600 underline-offset-4 hover:text-mist"
+          aria-expanded={showFields}
+        >
+          {showFields ? "Hide coordinates" : "Edit coordinates"}
+        </button>
       </div>
 
-      <div className="flex items-center justify-between text-xs">
-        <span className={incomplete ? "text-amber-400" : corners ? "text-emerald-400" : "text-slate-500"}>
-          {incomplete ? "Enter valid coordinates for all four corners" : corners ? `Set from ${source ?? "manual entry"}` : "Not set"}
-        </span>
-        {fields.some((f) => f) && (
-          <button
-            type="button"
-            className="flex items-center gap-1 text-slate-500 hover:text-slate-300"
-            onClick={() => {
-              setFields(toFields(null));
-              onChange(null, null);
-            }}
-          >
-            <Eraser className="h-3 w-3" /> Clear
-          </button>
-        )}
-      </div>
+      {showFields && (
+        <div className="space-y-2 rounded-lg border border-petrol-700 bg-petrol-950/50 p-3">
+          <div className="grid grid-cols-[88px_1fr_1fr] gap-2 text-xs text-mist-faint">
+            <span />
+            <span>Latitude</span>
+            <span>Longitude</span>
+          </div>
+          {LABELS.map((label, i) => (
+            <div key={label} className="grid grid-cols-[88px_1fr_1fr] items-center gap-2">
+              <span className="text-[13px] text-mist-muted">{label}</span>
+              <input
+                inputMode="decimal"
+                className="input"
+                placeholder="25.2048"
+                value={fields[i * 2]}
+                onChange={(e) => update(i * 2, e.target.value)}
+                aria-label={`${label} latitude`}
+              />
+              <input
+                inputMode="decimal"
+                className="input"
+                placeholder="55.2708"
+                value={fields[i * 2 + 1]}
+                onChange={(e) => update(i * 2 + 1, e.target.value)}
+                aria-label={`${label} longitude`}
+              />
+            </div>
+          ))}
+          {fields.some((f) => f) && (
+            <button
+              type="button"
+              className="flex items-center gap-1.5 pt-1 text-[13px] text-mist-muted hover:text-mist"
+              onClick={() => {
+                setFields(toFields(null));
+                onChange(null, null);
+              }}
+            >
+              <Eraser className="h-3.5 w-3.5" /> Clear coordinates
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

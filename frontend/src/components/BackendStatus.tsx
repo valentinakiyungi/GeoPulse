@@ -28,30 +28,36 @@ export default function BackendStatus() {
     };
   }, []);
 
-  let dot = "bg-slate-500";
-  let label = "Connecting…";
-  let title = API_URL;
+  let dot = "bg-mist-faint";
+  let label = "Connecting";
+  let detail = API_URL;
   if (state.kind === "offline") {
-    dot = "bg-red-500";
-    label = "Backend offline";
-    title = `No response from ${API_URL}`;
+    dot = "bg-alert";
+    label = "Server offline";
+    detail = `No response from ${API_URL}. Start the backend and this updates automatically.`;
   } else if (state.kind === "online") {
     const m = state.health.model;
-    const name = m.weights.split(/[\\/]/).pop();
+    const name = m.weights.split(/[\\/]/).pop() ?? m.weights;
     if (m.error) {
-      dot = "bg-amber-500";
+      dot = "bg-marker";
       label = "Model error";
-      title = m.error;
+      detail = m.error;
     } else {
-      dot = "bg-emerald-500 animate-pulse";
-      label = m.loaded ? `${name} ready` : `Online · ${name} loads on first run`;
+      dot = "bg-contour";
+      label = m.loaded ? "Ready" : "Online";
+      detail = m.loaded ? `${name} loaded` : `${name} loads on the first analysis`;
     }
   }
 
   return (
-    <div title={title} className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 font-mono text-xs text-slate-300">
+    <div
+      title={detail}
+      role="status"
+      className="flex items-center gap-2 rounded-full border border-petrol-600 bg-petrol-900 py-1.5 pl-2.5 pr-3 text-xs text-mist"
+    >
       <span className={`h-2 w-2 rounded-full ${dot}`} />
-      {label}
+      <span>{label}</span>
+      <span className="hidden max-w-[220px] truncate text-mist-faint md:inline">{state.kind === "online" ? detail : ""}</span>
     </div>
   );
 }

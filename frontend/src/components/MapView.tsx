@@ -12,14 +12,26 @@ import { cornersBounds, cornersToLngLat, cornersValid, formatArea } from "@/lib/
 
 export type Basemap = "satellite" | "streets";
 
+export interface ScreenRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface MapHandle {
-  /** Geographic position of the four corners of the current map viewport (TL, TR, BR, BL). */
-  getViewCorners(): Corners | null;
+  /**
+   * Geographic position (TL, TR, BR, BL) of a rectangle on screen, in map-container pixels.
+   * Defaults to the whole map viewport. Bearing and pitch are taken into account.
+   */
+  getCornersForRect(rect?: ScreenRect): Corners | null;
   fitCorners(corners: Corners): void;
   flyTo(lat: number, lng: number): void;
 }
 
 interface MapViewProps {
+  /** Extra padding (px) used when fitting the map, e.g. to keep clear of a bottom sheet. */
+  fitPadding?: { top: number; bottom: number; left: number; right: number };
   /** Imperative handle (passed as a prop because next/dynamic does not forward refs). */
   handleRef?: Ref<MapHandle>;
   result: AnalysisResult | null;
@@ -76,7 +88,7 @@ function escapeHtml(s: string) {
 }
 
 export default function MapView(props: MapViewProps) {
-  const { handleRef, result, hiddenClasses, selectedId, onSelect, corners, imageUrl, showImage, imageOpacity, basemap } = props;
+  const { handleRef, fitPadding, result, hiddenClasses, selectedId, onSelect, corners, imageUrl, showImage, imageOpacity, basemap } = props;
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const popupRef = useRef<Popup | null>(null);
@@ -107,7 +119,7 @@ export default function MapView(props: MapViewProps) {
         id: "footprint-line",
         type: "line",
         source: "footprint",
-        paint: { "line-color": "#fbbf24", "line-width": 2, "line-dasharray": [2, 2] },
+        paint: { "line-color": "#FF8A3D", "line-width": 2, "line-dasharray": [2, 1.5] },
       });
 
       map.addSource("detections", { type: "geojson", data: EMPTY_FC });
@@ -115,7 +127,7 @@ export default function MapView(props: MapViewProps) {
         id: "det-fill",
         type: "fill",
         source: "detections",
-        paint: { "fill-color": ["get", "color"], "fill-opacity": 0.3 },
+        paint: { "fill-color": ["get", "color"], "fill-opacity": 0.28 },
       });
       map.addLayer({
         id: "det-line",
@@ -128,7 +140,7 @@ export default function MapView(props: MapViewProps) {
         type: "line",
         source: "detections",
         filter: ["==", ["get", "id"], -1],
-        paint: { "line-color": "#ffffff", "line-width": 3 },
+        paint: { "line-color": "#FFFFFF", "line-width": 3 },
       });
 
       map.on("click", (e) => {
@@ -152,13 +164,12 @@ export default function MapView(props: MapViewProps) {
 
   // ------------------------------------------------------------- imperative API
   useImperativeHandle(handleRef, () => ({
-    getViewCorners() {
+    getCornersForRect(rect?: ScreenRect) {
       const map = mapRef.current;
       const el = container.current;
       if (!map || !el) return null;
-      const w = el.clientWidth;
-      const h = el.clientHeight;
-      const pts: [number, number][] = [[0, 0], [w, 0], [w, h], [0, h]];
+      const { x, y, width: w, height: h } = rect ?? { x: 0, y: 0, width: el.clientWidth, height: el.clientHeight };
+      const pts: [number, number][] = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
       return pts.map(([x, y]) => {
         const ll = map.unproject([x, y]);
         return [Number(ll.lat.toFixed(7)), Number(ll.lng.toFixed(7))] as LatLng;
@@ -166,12 +177,12 @@ export default function MapView(props: MapViewProps) {
     },
     fitCorners(c: Corners) {
       if (!mapRef.current || !cornersValid(c)) return;
-      mapRef.current.fitBounds(cornersBounds(c), { padding: 48, duration: 800, pitch: 0, bearing: 0 });
+      mapRef.current.fitBounds(cornersBounds(c), { padding: fitPadding ?? 48, duration: 800, pitch: 0, bearing: 0 });
     },
     flyTo(lat: number, lng: number) {
       const map = mapRef.current;
       if (!map) return;
-      map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 18), duration: 700 });
+      map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 18), duration: 700, padding: fitPadding });
     },
   }));
 
@@ -277,5 +288,5 @@ export default function MapView(props: MapViewProps) {
     map.setPaintProperty("overlay", "raster-opacity", imageOpacity);
   }, [imageOpacity, ready]);
 
-  return <div ref={container} className="absolute inset-0" />;
+  return <div ref={container} className="absolute inset-0" aria-label="Map" role="region" />;
 }
