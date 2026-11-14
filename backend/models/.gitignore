@@ -1,0 +1,3 @@
+# Downloaded model weights live here.
+*.pt
+*.onnx

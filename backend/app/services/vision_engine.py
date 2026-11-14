@@ -1,64 +1,85 @@
-import cv2
+"""Detection + geo-projection pipeline: image bytes in, GeoJSON FeatureCollection out."""
+
+from __future__ import annotations
+
+import time
+from collections import Counter
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
 import numpy as np
-from ultralytics import YOLO
-from typing import Dict, Any, List
-from app.services.geo_mapper import GeoMapper
+
+from app.services.detector import Detector
+from app.services.geo_mapper import GeoMapper, polygon_area_m2
+from app.services.imaging import decode_image
+
+LatLng = Tuple[float, float]
+
 
 class UrbanVisionEngine:
-    def __init__(self, model_weights: str = "yolov8n.pt"):
-        self.model = YOLO(model_weights)
+    def __init__(self, detector: Detector) -> None:
+        self.detector = detector
 
     def process_aerial_frame(
-        self, 
-        image_bytes: bytes, 
-        top_left_gps: List[float], 
-        bottom_right_gps: List[float]
+        self,
+        image_bytes: bytes,
+        corners: Sequence[LatLng],
+        confidence: Optional[float] = None,
+        classes: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        height, width, _ = img.shape
+        """
+        Args:
+            image_bytes: encoded image.
+            corners: (lat, lng) of the TL, TR, BR, BL image corners.
+            confidence: optional per-request confidence threshold.
+            classes: optional whitelist of class names to keep.
+        """
+        started = time.perf_counter()
+        img = decode_image(image_bytes)
+        height, width = img.shape[:2]
+        mapper = GeoMapper(corners, width, height)
 
-        mapper = GeoMapper(
-            top_left_gps=(top_left_gps[0], top_left_gps[1]),
-            bottom_right_gps=(bottom_right_gps[0], bottom_right_gps[1]),
-            img_width=width,
-            img_height=height
-        )
+        detections = self.detector.detect(img, confidence=confidence)
+        if classes:
+            wanted = {c.strip().lower() for c in classes if c.strip()}
+            detections = [d for d in detections if d.label.lower() in wanted]
 
-        results = self.model(img, conf=0.25)[0]
-        features: List[Dict] = []
-        object_counts: Dict[str, int] = {}
-
-        for box in results.boxes:
-            cls_id = int(box.cls[0])
-            label = self.model.names[cls_id]
-            confidence = float(box.conf[0])
-            xyxy = box.xyxy[0].tolist()
-
-            geometry = mapper.bbox_to_geojson_polygon(xyxy)
-            cx = (xyxy[0] + xyxy[2]) / 2.0
-            cy = (xyxy[1] + xyxy[3]) / 2.0
-            center_lat, center_lng = mapper.pixel_to_gps(cx, cy)
-
-            feature = {
-                "type": "Feature",
-                "geometry": geometry,
-                "properties": {
-                    "class_name": label,
-                    "confidence": round(confidence, 3),
-                    "center_lat": center_lat,
-                    "center_lng": center_lng
+        features: List[Dict[str, Any]] = []
+        for idx, det in enumerate(detections):
+            geometry = mapper.polygon_to_geojson(det.polygon)
+            ring = geometry["coordinates"][0][:-1]
+            center_lat, center_lng = mapper.pixel_to_gps(*det.center)
+            features.append(
+                {
+                    "type": "Feature",
+                    "id": idx,
+                    "geometry": geometry,
+                    "properties": {
+                        "id": idx,
+                        "class_name": det.label,
+                        "confidence": round(det.confidence, 4),
+                        "center_lat": center_lat,
+                        "center_lng": center_lng,
+                        "area_m2": round(polygon_area_m2([(lat, lng) for lng, lat in ring]), 2),
+                        "pixel_bbox": [round(v, 1) for v in det.bbox],
+                        "oriented": det.oriented,
+                    },
                 }
-            }
-            features.append(feature)
-            object_counts[label] = object_counts.get(label, 0) + 1
+            )
 
+        counts = Counter(f["properties"]["class_name"] for f in features)
+        confidences = [f["properties"]["confidence"] for f in features]
         return {
             "type": "FeatureCollection",
             "features": features,
             "metadata": {
                 "total_detections": len(features),
-                "class_counts": object_counts,
-                "frame_dimensions": {"width": width, "height": height}
-            }
+                "class_counts": dict(counts.most_common()),
+                "mean_confidence": round(float(np.mean(confidences)), 4) if confidences else None,
+                "frame_dimensions": {"width": width, "height": height},
+                "corners": [list(c) for c in mapper.corners],
+                "footprint": mapper.footprint_geojson(),
+                "footprint_area_m2": round(mapper.footprint_area_m2(), 1),
+                "ground_sample_distance_m": round(mapper.ground_sample_distance(), 4),
+                "processing_seconds": round(time.perf_counter() - started, 3),
+            },
         }
