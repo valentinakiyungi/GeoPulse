@@ -1,8 +1,9 @@
 import type { AnalysisResult, Corners, LatLng } from "./types";
 
+// Bright enough to read over satellite imagery; orange is kept back for the image footprint.
 const PALETTE = [
-  "#22d3ee", "#a3e635", "#f472b6", "#facc15", "#fb923c", "#818cf8",
-  "#34d399", "#f87171", "#c084fc", "#2dd4bf", "#fbbf24", "#60a5fa",
+  "#5ED1C4", "#F7E05B", "#FF6FA8", "#7CC0FF", "#B8F26B", "#C79BFF",
+  "#FFB4E1", "#54E8A0", "#FFD0A0", "#9FE7FF", "#E9F57A", "#FF8FA0",
 ];
 
 /** Stable colour per class name. */
