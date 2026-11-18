@@ -4,6 +4,8 @@
 
 **Find objects in aerial and satellite imagery and see exactly where they are on the map.**
 
+**[Open the live dashboard](https://valentinakiyungi.github.io/GeoPulse/)**
+
 [![CI](https://github.com/valentinakiyungi/GeoPulse/actions/workflows/ci.yml/badge.svg)](https://github.com/valentinakiyungi/GeoPulse/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B2229.svg)](LICENSE)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-1E4C58.svg)
@@ -16,6 +18,7 @@
 [Configuration](#configuration) ·
 [API reference](#api-reference) ·
 [Development](#development) ·
+[Deployment](#deployment) ·
 [License](#license)
 
 </div>
@@ -276,7 +279,8 @@ GeoPulse/
 │   ├── src/components/          Map, survey frame, panels
 │   ├── src/lib/                 API client, types, geo helpers
 │   └── Dockerfile
-├── .github/workflows/ci.yml
+├── deploy/huggingface/          Space configuration for the engine
+├── .github/workflows/           CI, Pages and Hugging Face deploys
 └── docker-compose.yml
 ```
 
@@ -307,14 +311,62 @@ npm run build
 **Using a custom model.** Train with Ultralytics on your own labelled imagery, then point `GEOPULSE_MODEL`
 at the resulting `best.pt`. Class names are read from the model and appear in the dashboard automatically.
 
-## Deployment notes
+## Deployment
 
-- Set `NEXT_PUBLIC_API_URL` to the engine's public URL **before** building the dashboard, and add
-  the dashboard's origin to `GEOPULSE_CORS_ORIGINS`.
+GeoPulse deploys as two pieces, both free and both updated automatically on every push to `main`:
+
+| Piece | Host | Workflow | Address |
+| --- | --- | --- | --- |
+| Dashboard | GitHub Pages | [`deploy-pages.yml`](.github/workflows/deploy-pages.yml) | `https://<user>.github.io/GeoPulse/` |
+| Engine | Hugging Face Spaces (Docker, CPU) | [`deploy-engine.yml`](.github/workflows/deploy-engine.yml) | `https://<user>-<space>.hf.space` |
+
+GitHub Pages can only serve static files, so the dashboard is exported as a static site and the
+Python engine runs on Hugging Face, which serves it over HTTPS.
+
+### One-time setup
+
+**1. Create the engine Space**
+1. Sign in at [huggingface.co](https://huggingface.co) and create a **New Space**.
+   - Name: `geopulse-engine`
+   - SDK: **Docker**, using the **Blank** template
+   - Hardware: **CPU basic** (free)
+2. Create an access token at **Settings → Access Tokens** with the **Write** role.
+
+**2. Connect GitHub to the Space**
+
+In the GitHub repository, open **Settings → Secrets and variables → Actions**.
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Secret | `HF_TOKEN` | The Hugging Face write token |
+| Variable | `HF_SPACE` | `<hf-username>/geopulse-engine` |
+| Variable | `GEOPULSE_API_URL` | `https://<hf-username>-geopulse-engine.hf.space` |
+
+**3. Turn on GitHub Pages**
+
+Open **Settings → Pages** and set **Source** to **GitHub Actions**.
+
+**4. Deploy**
+
+Open the **Actions** tab, then run **Deploy engine to Hugging Face Spaces** and **Deploy dashboard to
+GitHub Pages** with **Run workflow**. After that, both deploy on their own whenever `backend/` or
+`frontend/` changes. The engine's first build takes about 5–10 minutes.
+
+The engine workflow also sets the Space's `GEOPULSE_CORS_ORIGINS` to the Pages address, so the
+dashboard is allowed to call it.
+
+### Notes
+
+- Free Spaces go to sleep after a period without traffic. The first analysis after a pause can take up
+  to a minute while the engine wakes and loads the model.
+- `NEXT_PUBLIC_API_URL` is built into the dashboard. After changing the `GEOPULSE_API_URL` variable,
+  re-run the Pages workflow.
+- To host the engine elsewhere, the Docker image in `backend/` runs on any container host that sets
+  `$PORT` (Render, Railway, Fly.io, Google Cloud Run). Add the dashboard's origin to `GEOPULSE_CORS_ORIGINS`.
 - Jobs are held in memory, so run a single engine process (`uvicorn` without `--workers`), or add
   shared storage before scaling out.
-- The engine has no authentication. Put it behind a reverse proxy or API gateway with
-  authentication before exposing it to the internet.
+- The engine has no authentication, so anyone with its address can use it. For a private deployment,
+  put it behind a reverse proxy or API gateway with authentication, or make the Space private.
 - The default basemaps are Esri World Imagery and the OpenStreetMap tile servers. For production or
   heavy traffic, review the [Esri terms of use](https://www.esri.com/en-us/legal/terms/full-master-agreement)
   and the [OSM tile usage policy](https://operations.osmfoundation.org/policies/tiles/), or switch to your own tile provider in `MapView.tsx`.

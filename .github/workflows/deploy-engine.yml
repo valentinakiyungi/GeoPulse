@@ -1,0 +1,64 @@
+name: Deploy engine to Hugging Face Spaces
+
+# Runs only once the repository variable HF_SPACE (e.g. "valentinakiyungi/geopulse-engine")
+# and the secret HF_TOKEN (a Hugging Face access token with write permission) are set.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "deploy/huggingface/**"
+      - ".github/workflows/deploy-engine.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: hf-space
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ vars.HF_SPACE != '' }}
+    runs-on: ubuntu-latest
+    env:
+      HF_SPACE: ${{ vars.HF_SPACE }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check token
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error::Add a Hugging Face write token as the repository secret HF_TOKEN."
+            exit 1
+          fi
+
+      - name: Push backend to the Space
+        run: |
+          git clone "https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}" space
+          rsync -a --delete \
+            --exclude '.git' --exclude '.env' --exclude 'models/*.pt' \
+            --exclude '__pycache__' --exclude '.pytest_cache' --exclude '.venv' \
+            backend/ space/
+          cp deploy/huggingface/README.md space/README.md
+          cd space
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Space is already up to date."
+            exit 0
+          fi
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" \
+            commit -m "Deploy ${GITHUB_SHA::7} from GitHub"
+          git push
+
+      - name: Configure the Space
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          ORIGINS="https://${OWNER}.github.io,http://localhost:3000"
+          for pair in "GEOPULSE_CORS_ORIGINS=${ORIGINS}" "GEOPULSE_WARMUP=true"; do
+            key="${pair%%=*}"; value="${pair#*=}"
+            curl -sS --fail-with-body -X POST "https://huggingface.co/api/spaces/${HF_SPACE}/variables" \
+              -H "Authorization: Bearer ${HF_TOKEN}" -H "Content-Type: application/json" \
+              -d "{\"key\": \"${key}\", \"value\": \"${value}\"}" > /dev/null
+            echo "Set ${key}"
+          done
